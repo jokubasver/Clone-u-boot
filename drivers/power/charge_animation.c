@@ -107,8 +107,12 @@ static int charge_animation_ofdata_to_platdata(struct udevice *dev)
 	struct charge_animation_pdata *pdata = dev_get_platdata(dev);
 
 	/* charge mode */
+#if defined(CONFIG_PLATFORM_ODROID_GOADV)
+	pdata->uboot_charge = 1;
+#else
 	pdata->uboot_charge =
 		dev_read_u32_default(dev, "rockchip,uboot-charge-on", 0);
+#endif
 	pdata->android_charge =
 		dev_read_u32_default(dev, "rockchip,android-charge-on", 0);
 
@@ -547,7 +551,7 @@ static int charge_animation_show(struct udevice *dev)
 	int start_idx = 0, show_idx = -1, old_show_idx = IMAGE_RESET_IDX;
 	int soc, voltage, current, key_state;
 	int i, charging = 1, ret;
-#ifdef CONFIG_RKIMG_BOOTLOADER
+#if defined(CONFIG_RKIMG_BOOTLOADER) && !defined(CONFIG_PLATFORM_ODROID_GOADV)
 	int boot_mode;
 #endif
 	int first_poll_fg = 1;
@@ -588,22 +592,30 @@ static int charge_animation_show(struct udevice *dev)
 
 	/* Not valid charge mode, exit */
 #ifdef CONFIG_RKIMG_BOOTLOADER
-	boot_mode = rockchip_get_boot_mode();
 #ifdef CONFIG_PLATFORM_ODROID_GOADV
-	/* reboot flag is normal. */
-	if (boot_mode == BOOT_MODE_NORMAL) {
-		printf("Exit charge: due to boot mode=%d\n", boot_mode);
+	/* Check charger and power key instead of boot_mode */
+	charging = fg_charger_get_chrg_online(dev);
+	key_state = key_read(KEY_POWER);
+	printf("[charge] chrg_online=%d, key_state=%d\n", charging, key_state);
+	if (charging > 0) {
+		if (key_state == KEY_PRESS_DOWN || key_state == KEY_PRESS_LONG_DOWN) {
+			printf("Exit charge: charger online but power key pressed\n");
+			return 0;
+		}
+		/* Charger online, no key pressed, show charge animation */
+		printf("Charger online, entering charge animation\n");
+	} else {
+		printf("Exit charge: no charger\n");
 		return 0;
 	}
 #else
+	boot_mode = rockchip_get_boot_mode();
 	if ((boot_mode != BOOT_MODE_CHARGING) &&
 	    (boot_mode != BOOT_MODE_UNDEFINE)) {
 		printf("Exit charge: due to boot mode=%d\n", boot_mode);
 		/* FIXME : check this scenario in case of cold boot */
 		/* return 0; */
 	}
-#endif
-#endif
 
 	/* Not charger online, exit */
 	charging = fg_charger_get_chrg_online(dev);
@@ -611,6 +623,8 @@ static int charge_animation_show(struct udevice *dev)
 		printf("Exit charge: due to charger offline\n");
 		return 0;
 	}
+#endif
+#endif
 
 	/* Enter android charge, set property for kernel */
 	if (pdata->android_charge) {

@@ -1040,26 +1040,32 @@ void rockchip_show_fbbase(ulong fbbase)
 	struct display_state *s;
 
 	list_for_each_entry(s, &rockchip_display_list, head) {
-		s->logo.mode = ROCKCHIP_DISPLAY_FULLSCREEN;
-		s->logo.mem = (char *)fbbase;
-#if defined(CONFIG_PLATFORM_ODROID_GOADV)
-		if (!strcmp(env_get("hwrev"), "rg351p")) {
-			s->logo.width = 320;
+		/* 初始化拿到 mode（hdisplay/vdisplay） */
+		display_init(s);
+		if (!s->is_init) {
+			printf("[fbbase] display_init failed, fallback 640x480\n");
+			s->logo.width  = 640;
 			s->logo.height = 480;
 		} else {
-			s->logo.width = 640;
-			s->logo.height = 480;
+			printf("[fbbase] mode %dx%d\n",
+			       s->conn_state.mode.hdisplay, s->conn_state.mode.vdisplay);
+			s->logo.width  = s->conn_state.mode.hdisplay;
+			s->logo.height = s->conn_state.mode.vdisplay;
 		}
-#else
-		s->logo.width = DRM_ROCKCHIP_FB_WIDTH;
-		s->logo.height = DRM_ROCKCHIP_FB_HEIGHT;
-#endif
-		s->logo.bpp = 32;
+
+		s->logo.mode    = ROCKCHIP_DISPLAY_FULLSCREEN;
+		s->logo.mem     = (char *)fbbase;
+		s->logo.bpp     = 32;
 		s->logo.ymirror = 0;
+
+		printf("[fbbase] logo %dx%d bpp=%d\n",
+		       s->logo.width, s->logo.height, s->logo.bpp);
 
 		display_logo(s);
 	}
 }
+
+
 
 int rockchip_show_bmp(const char *bmp)
 {
@@ -1089,16 +1095,31 @@ int rockchip_show_logo(void)
 
 	list_for_each_entry(s, &rockchip_display_list, head) {
 		s->logo.mode = s->logo_mode;
-		if (load_bmp_logo(&s->logo, s->ulogo_name))
+		if (load_bmp_logo(&s->logo, s->ulogo_name)) {
 			printf("failed to display uboot logo\n");
-		else
-			ret = display_logo(s);
+			continue;
+		}
 
-		/* Load kernel bmp in rockchip_display_fixup() later */
+		/* ★ 新增：BMP 走 FULLSCREEN 时，强制源宽高匹配面板时序 */
+		display_init(s);
+		if (s->is_init && s->logo.mode == ROCKCHIP_DISPLAY_FULLSCREEN) {
+			printf("[bmp] mode %dx%d, bmp %dx%d -> use mode size\n",
+			       s->conn_state.mode.hdisplay, s->conn_state.mode.vdisplay,
+			       s->logo.width, s->logo.height);
+			s->logo.width  = s->conn_state.mode.hdisplay;
+			s->logo.height = s->conn_state.mode.vdisplay;
+			/* 32bpp 路径，不用 offset/palette，等同 raw FB */
+			s->logo.offset = 0;
+			s->logo.ymirror = 0;
+			s->logo.bpp = 32;
+		}
+
+		ret = display_logo(s);
 	}
 
 	return ret;
 }
+
 
 enum {
 	PORT_DIR_IN,
@@ -1265,6 +1286,27 @@ static struct rockchip_phy *rockchip_of_find_phy(struct udevice *dev)
 	return (struct rockchip_phy *)dev_get_driver_data(phy_dev);
 }
 
+static void rk_set_uc_priv_size_from_mode(struct udevice *dev)
+{
+	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
+	struct display_state *s;
+
+	list_for_each_entry(s, &rockchip_display_list, head) {
+		display_init(s);
+		if (s->is_init) {
+			uc_priv->xsize = s->conn_state.mode.hdisplay;
+			uc_priv->ysize = s->conn_state.mode.vdisplay;
+			printf("[probe] uc_priv size %dx%d\n", uc_priv->xsize, uc_priv->ysize);
+			return;
+		}
+	}
+
+	uc_priv->xsize = 640;
+	uc_priv->ysize = 480;
+	printf("[probe] fallback uc_priv size %dx%d\n", uc_priv->xsize, uc_priv->ysize);
+}
+
+
 static int rockchip_display_probe(struct udevice *dev)
 {
 	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
@@ -1417,18 +1459,7 @@ static int rockchip_display_probe(struct udevice *dev)
 		return -ENODEV;
 	}
 
-#if defined(CONFIG_PLATFORM_ODROID_GOADV)
-	if (!strcmp(env_get("hwrev"), "rg351p")) {
-		uc_priv->xsize = 320;
-		uc_priv->ysize = 480;
-	} else {
-		uc_priv->xsize = 640;
-		uc_priv->ysize = 480;
-	}
-#else
-	uc_priv->xsize = DRM_ROCKCHIP_FB_WIDTH;
-	uc_priv->ysize = DRM_ROCKCHIP_FB_HEIGHT;
-#endif
+	rk_set_uc_priv_size_from_mode(dev);
 	uc_priv->bpix = VIDEO_BPP32;
 
 	#ifdef CONFIG_DRM_ROCKCHIP_VIDEO_FRAMEBUFFER

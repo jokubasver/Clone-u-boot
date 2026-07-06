@@ -422,16 +422,26 @@ static int regulator_pre_probe(struct udevice *dev)
 {
 	struct dm_regulator_uclass_platdata *uc_pdata;
 	ofnode node;
+	bool uboot_mode;
 
 	uc_pdata = dev_get_uclass_platdata(dev);
 	if (!uc_pdata)
 		return -ENXIO;
 
+	uboot_mode = dev_read_bool(dev, "uboot_mode");
+
 	/* Regulator's optional constraints */
-	uc_pdata->min_uV = dev_read_u32_default(dev, "regulator-min-microvolt",
-						-ENODATA);
-	uc_pdata->max_uV = dev_read_u32_default(dev, "regulator-max-microvolt",
-						-ENODATA);
+	if (uboot_mode) {
+		uc_pdata->min_uV = dev_read_u32_default(dev,
+					"regulator-uboot-min-microvolt", -ENODATA);
+		uc_pdata->max_uV = dev_read_u32_default(dev,
+					"regulator-uboot-max-microvolt", -ENODATA);
+	} else {
+		uc_pdata->min_uV = dev_read_u32_default(dev,
+					"regulator-min-microvolt", -ENODATA);
+		uc_pdata->max_uV = dev_read_u32_default(dev,
+					"regulator-max-microvolt", -ENODATA);
+	}
 	uc_pdata->init_uV = dev_read_u32_default(dev, "regulator-init-microvolt",
 						-ENODATA);
 	uc_pdata->min_uA = dev_read_u32_default(dev, "regulator-min-microamp",
@@ -446,11 +456,18 @@ static int regulator_pre_probe(struct udevice *dev)
 	node = dev_read_subnode(dev, "regulator-state-mem");
 	if (ofnode_valid(node)) {
 		uc_pdata->suspend_on = !ofnode_read_bool(node, "regulator-off-in-suspend");
-		if (ofnode_read_u32(node, "regulator-suspend-microvolt", &uc_pdata->suspend_uV))
-			uc_pdata->suspend_uV = uc_pdata->max_uA;
+		if (uboot_mode) {
+			if (ofnode_read_u32(node, "regulator-suspend-uboot-microvolt",
+			    &uc_pdata->suspend_uV))
+				uc_pdata->suspend_uV = uc_pdata->max_uV;
+		} else {
+			if (ofnode_read_u32(node, "regulator-suspend-microvolt",
+			    &uc_pdata->suspend_uV))
+				uc_pdata->suspend_uV = uc_pdata->max_uV;
+		}
 	} else {
 		uc_pdata->suspend_on = true;
-		uc_pdata->suspend_uV = uc_pdata->max_uA;
+		uc_pdata->suspend_uV = uc_pdata->max_uV;
 	}
 
 	/* Those values are optional (-ENODATA if unset) */

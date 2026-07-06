@@ -454,15 +454,39 @@ static int rockchip_panel_ofdata_to_platdata(struct udevice *dev)
 	const void *data;
 	int len = 0;
 	int ret;
+	int val;
 
 	plat->power_invert = dev_read_bool(dev, "power-invert");
 
-	plat->delay.prepare = dev_read_u32_default(dev, "prepare-delay-ms", 0);
-	plat->delay.unprepare = dev_read_u32_default(dev, "unprepare-delay-ms", 0);
-	plat->delay.enable = dev_read_u32_default(dev, "enable-delay-ms", 0);
-	plat->delay.disable = dev_read_u32_default(dev, "disable-delay-ms", 0);
-	plat->delay.init = dev_read_u32_default(dev, "init-delay-ms", 0);
-	plat->delay.reset = dev_read_u32_default(dev, "reset-delay-ms", 0);
+	val = dev_read_u32_default(dev, "uboot-prepare-delay-ms", -1);
+	if (val == -1)
+		val = dev_read_u32_default(dev, "prepare-delay-ms", 0);
+	plat->delay.prepare = val;
+
+	val = dev_read_u32_default(dev, "uboot-unprepare-delay-ms", -1);
+	if (val == -1)
+		val = dev_read_u32_default(dev, "unprepare-delay-ms", 0);
+	plat->delay.unprepare = val;
+
+	val = dev_read_u32_default(dev, "uboot-enable-delay-ms", -1);
+	if (val == -1)
+		val = dev_read_u32_default(dev, "enable-delay-ms", 0);
+	plat->delay.enable = val;
+
+	val = dev_read_u32_default(dev, "uboot-disable-delay-ms", -1);
+	if (val == -1)
+		val = dev_read_u32_default(dev, "disable-delay-ms", 0);
+	plat->delay.disable = val;
+
+	val = dev_read_u32_default(dev, "uboot-init-delay-ms", -1);
+	if (val == -1)
+		val = dev_read_u32_default(dev, "init-delay-ms", 0);
+	plat->delay.init = val;
+
+	val = dev_read_u32_default(dev, "uboot-reset-delay-ms", -1);
+	if (val == -1)
+		val = dev_read_u32_default(dev, "reset-delay-ms", 0);
+	plat->delay.reset = val;
 
 	plat->bus_format = dev_read_u32_default(dev, "bus-format",
 						MEDIA_BUS_FMT_RBG888_1X24);
