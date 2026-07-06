@@ -31,8 +31,10 @@ RKCHIP_INI_DESC=("CONFIG_TARGET_GVA_RK3229       NA          RK322XAT     NA"
 # if [[ "${BOARD}" == "odroidgo"* ]]; then
 if [[ "${BOARD}" == "odroidgoa"* ]]; then
 RKBIN_TOOLS=./tools/rk_tools/tools
+RKTOOLS=./tools
 else
 RKBIN_TOOLS=../rkbin/tools
+RKTOOLS=./tools
 fi
 
 # User's GCC toolchain and relative path
@@ -48,8 +50,14 @@ TOOLCHAIN_ARM32_OPT=/opt/toolchains/gcc-linaro-6.3.1-2017.05-x86_64_arm-linux-gn
 TOOLCHAIN_ARM64_OPT=/opt/toolchains/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu/bin
 
 ########################################### User not touch #############################################
+if [[ "${BOARD}" == "odroidgoa"* ]]; then
+BIN_PATH_FIXUP=""
+else
 BIN_PATH_FIXUP="--replace tools/rk_tools/ ./"
+fi
+if [[ "${RKTOOLS}" == "" ]]; then
 RKTOOLS=./tools
+fi
 
 # Declare global INI file searching index name for every chip, update in select_chip_info()
 RKCHIP=
@@ -818,8 +826,8 @@ pack_trust_image()
 
 pack_idbloader()
 {
-	tools/mkimage -n px30 -T rksd -d ${RKBIN}/bin/rk33/rk3326_ddr_333MHz_v1.10.bin ./sd_fuse/idbloader.img
-	cat ${RKBIN}/bin/rk33/rk3326_miniloader_v1.12.bin >> ./sd_fuse/idbloader.img
+	tools/mkimage -n px30 -T rksd -d ${RKBIN}/bin/rk33/rk3326_ddr_333MHz_v2.12.bin ./sd_fuse/idbloader.img
+	cat ${RKBIN}/bin/rk33/rk3326_miniloader_v1.40.bin >> ./sd_fuse/idbloader.img
 }
 
 finish()
@@ -847,6 +855,14 @@ select_chip_info
 fixup_platform_configure
 sub_commands
 make CROSS_COMPILE=${TOOLCHAIN_GCC}  all --jobs=${JOB} ${OUTOPT}
+
+# For odroidgoa: override compiled tools with rkbin pre-built versions
+if [[ "${BOARD}" == "odroidgoa"* ]]; then
+	cp ${RKBIN_TOOLS}/boot_merger ${RKTOOLS}/boot_merger
+	cp ${RKBIN_TOOLS}/trust_merger ${RKTOOLS}/trust_merger
+	cp ${RKBIN_TOOLS}/loaderimage ${RKTOOLS}/loaderimage 2>/dev/null || true
+fi
+
 pack_uboot_image
 pack_loader_image
 pack_trust_image
