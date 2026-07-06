@@ -16,6 +16,9 @@
 #ifdef CONFIG_DM_CHARGE_DISPLAY
 #include <power/charge_display.h>
 #endif
+#ifdef CONFIG_DM_FUEL_GAUGE
+#include <power/fuel_gauge.h>
+#endif
 #include <rockchip_display_cmds.h>
 #include <odroidgoa_status.h>
 
@@ -221,9 +224,21 @@ int rk_board_late_init(void)
 	}
 
 #ifdef CONFIG_DM_CHARGE_DISPLAY
-	if (odroid_check_dcjack() &&
-		(CMD_RET_SUCCESS != run_command("fatload mmc 1:1 $loadaddr manufacture", 0)))
-		charge_display();
+	{
+		struct udevice *fg;
+		int chrg_online = 0;
+
+		if (!uclass_get_device(UCLASS_FG, 0, &fg))
+			chrg_online = fuel_gauge_get_chrg_online(fg);
+
+		if (chrg_online > 0) {
+			printf("[board] charger detected (PMIC), entering charge display\n");
+			charge_display();
+			printf("[board] charge_display returned\n");
+		} else {
+			printf("[board] charger NOT detected (PMIC)\n");
+		}
+	}
 #endif
 
 	/* show boot logo and version */

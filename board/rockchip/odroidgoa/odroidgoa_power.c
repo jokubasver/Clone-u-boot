@@ -10,7 +10,7 @@
 #include <power/fuel_gauge.h>
 #include <odroidgoa_status.h>
 
-#define MIN_VOL_LEVEL	3530	/* 3.53V */
+#define MIN_VOL_LEVEL	3280	/* 3.28V */
 
 #define PWR_LED_GPIO	18	/* GPIO0_C2 */
 #define DC_DET_GPIO	11	/* GPIO0_B3 */
@@ -38,11 +38,11 @@ int odroid_check_dcjack(void)
 
 	gpio_request(DC_DET_GPIO, "dc_det_gpio");
 	if (gpio_get_value(DC_DET_GPIO)) {
-		debug("dc jack is connected\n");
-		return 1;
-	} else {
 		debug("dc jack is NOT connected\n");
 		return 0;
+	} else {
+		debug("dc jack is connected\n");
+		return 1;
 	}
 }
 

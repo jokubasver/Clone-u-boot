@@ -38,6 +38,7 @@
 #include <asm/arch/rk_atags.h>
 #include <asm/arch/vendor.h>
 #include <odroidgoa_status.h>
+#include <fs.h>
 extern int recovery_check_mandatory_files(void);
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -347,6 +348,52 @@ void board_set_spilayout(void)
 	}
 }
 
+static int load_dtb_from_boot_ini(void)
+{
+	char buf[4096];
+	loff_t len_read;
+	char *line, *next_line;
+
+	run_command("mmc rescan", 0);
+
+	if (fs_set_blk_dev("mmc", "1:1", FS_TYPE_FAT))
+		return -1;
+
+	if (fs_read("boot.ini", (ulong)buf, 0, sizeof(buf) - 1, &len_read) != 0)
+		return -1;
+
+	if (len_read <= 0)
+		return -1;
+
+	buf[len_read] = '\0';
+
+	line = buf;
+	while (line && *line) {
+		next_line = strchr(line, '\n');
+		if (next_line)
+			*next_line++ = '\0';
+
+		if (strncmp(line, "load", 4) == 0 && strstr(line, ".dtb")) {
+			char *end = line + strlen(line);
+			while (end > line && (*(end - 1) == ' ' ||
+			       *(end - 1) == '\t' || *(end - 1) == '\r'))
+				end--;
+			*end = '\0';
+
+			char *start = strrchr(line, ' ');
+			if (start && strstr(start + 1, ".dtb")) {
+				env_set("dtb_uboot", start + 1);
+				printf("boot.ini: dtb_uboot=%s\n", start + 1);
+				return 0;
+			}
+		}
+
+		line = next_line;
+	}
+
+	return -1;
+}
+
 int init_kernel_dtb(void)
 {
 	ulong fdt_addr;
@@ -354,6 +401,9 @@ int init_kernel_dtb(void)
 
 	/* check hw revision */
 	board_check_hwrev();
+
+	/* load kernel dtb name from boot.ini for uboot use */
+	load_dtb_from_boot_ini();
 
 	/* adjust offsets of spi flash layout */
 	board_set_spilayout();
