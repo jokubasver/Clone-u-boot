@@ -8,9 +8,22 @@
 #include <dm.h>
 #include <asm/gpio.h>
 #include <power/fuel_gauge.h>
+#include <power/charge_animation.h>
 #include <odroidgoa_status.h>
 
-#define MIN_VOL_LEVEL	3280	/* 3.28V */
+/*
+ * charge_extrem_low_power() uses 'low_power_voltage + 50' as its exit line:
+ * while charging, the terminal voltage reading is inflated by charge current
+ * through the battery's internal resistance, so +50mV margin is required
+ * before trusting it above the nominal line.
+ *
+ * This gate runs with no charger while the system draws load: the reading
+ * is deflated by I*R sag instead, so the margin goes the other direction.
+ * poweroff only below 'low_power_voltage - 50'; the pair (3055-50, 3055+50)
+ * forms hysteresis around the nominal dtb line.
+ */
+#define LOW_POWER_OFFSET	50
+#define DEFAULT_LOW_POWER_VOLTAGE	3055
 
 #define PWR_LED_GPIO	18	/* GPIO0_C2 */
 #define DC_DET_GPIO	11	/* GPIO0_B3 */
@@ -46,41 +59,53 @@ int odroid_check_dcjack(void)
 	}
 }
 
-int odroid_check_battery(int *battery)
+static int board_get_low_power_voltage(void)
 {
-	int ret;
-	struct udevice *fg;
+	struct udevice *dev;
+	struct charge_animation_pdata *pdata;
 
-	ret = uclass_get_device(UCLASS_FG, 0, &fg);
-	if (ret) {
-		if (ret == -ENODEV)
-			debug("Can't find FG\n");
-		else
-			debug("Get UCLASS FG failed: %d\n", ret);
-		return ret;
+	if (!uclass_get_device(UCLASS_CHARGE_DISPLAY, 0, &dev)) {
+		pdata = dev_get_platdata(dev);
+		if (pdata->low_power_voltage > LOW_POWER_OFFSET)
+			return pdata->low_power_voltage - LOW_POWER_OFFSET;
 	}
 
-	*battery = fuel_gauge_get_voltage(fg);
-
-	debug("BATTERY %d\n", *battery);
-
-	return *battery < MIN_VOL_LEVEL ? 0 : 1;
+	return DEFAULT_LOW_POWER_VOLTAGE - LOW_POWER_OFFSET;
 }
 
 int board_check_power(void)
 {
-	int battery = 0;
-	int dcpower = 0;
+	struct udevice *fg;
+	int battery;
+	int chrg_online;
+	int threshold;
 	char str[32];
 
 	board_chg_led();
 
-	dcpower = odroid_check_dcjack();
+	if (uclass_get_device(UCLASS_FG, 0, &fg)) {
+		debug("Can't find FG, skip power check\n");
+		return 0;
+	}
 
-	if (odroid_check_battery(&battery) || dcpower)
+	/* set pwr led on by default */
+	board_pwr_led(true);
+
+	battery = fuel_gauge_get_voltage(fg);
+	if (battery < 0)
 		return 0;
 
-	debug("low battery (%d) without dc jack connected\n", battery);
+	/* charger detection by PMIC plug-in status, not DC_DET gpio */
+	chrg_online = fuel_gauge_get_chrg_online(fg);
+
+	threshold = board_get_low_power_voltage();
+
+	/* charger online or battery above the extrem-low-power line */
+	if (chrg_online > 0 || battery >= threshold)
+		return 0;
+
+	debug("low battery (%d) without charger, threshold=%d\n",
+	      battery, threshold);
 	sprintf(str, "voltage level : %d.%dV", (battery / 1000), (battery % 1000));
 	odroid_display_status(LOGO_MODE_LOW_BATT, LOGO_STORAGE_ANYWHERE, str);
 	odroid_wait_pwrkey();

@@ -213,7 +213,7 @@ int rk_board_late_init(void)
 	board_init_switch_gpio();
 
 	/* check power */
-	if(board_check_power())
+	if (board_check_power())
 		return 0;
 
 	/* check recovery */
