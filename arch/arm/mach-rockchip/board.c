@@ -394,6 +394,30 @@ static int load_dtb_from_boot_ini(void)
 	return -1;
 }
 
+#ifdef CONFIG_TARGET_ODROIDGOA
+static void odroidgoa_preserve_mmc_numbering(void *fdt)
+{
+	static const char * const mmc_aliases[] = { "mmc0", "mmc1", "mmc2" };
+	int aliases, i, ret;
+
+	/*
+	 * The board code and boot.ini use MMC 1 for the OS card. Linux's MMC
+	 * aliases can renumber it to MMC 0 and trigger the no-SD-card path.
+	 * This is U-Boot's private DTB copy; Linux loads its own DTB later.
+	 */
+	aliases = fdt_path_offset(fdt, "/aliases");
+	if (aliases < 0)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(mmc_aliases); i++) {
+		ret = fdt_delprop(fdt, aliases, mmc_aliases[i]);
+		if (ret && ret != -FDT_ERR_NOTFOUND)
+			printf("Failed to remove U-Boot %s alias: %s\n",
+			       mmc_aliases[i], fdt_strerror(ret));
+	}
+}
+#endif
+
 int init_kernel_dtb(void)
 {
 	ulong fdt_addr;
@@ -447,6 +471,9 @@ int init_kernel_dtb(void)
 	 * There is a phandle miss match between U-Boot and kernel dtb node,
 	 * the typical is cru phandle, we fixup it in U-Boot live dt nodes.
 	 */
+#ifdef CONFIG_TARGET_ODROIDGOA
+	odroidgoa_preserve_mmc_numbering((void *)fdt_addr);
+#endif
 	phandles_fixup((void *)fdt_addr);
 
 	of_live_build((void *)fdt_addr, (struct device_node **)&gd->of_root);
