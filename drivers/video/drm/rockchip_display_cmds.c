@@ -470,7 +470,7 @@ int lcd_show_logo(void)
 	env_set("filesize", "0");
 
 	/* sending command */
-	sprintf(cmd, "fatload mmc 1:1 %p %s",
+	sprintf(cmd, "fatload ${devtype} ${devnum}:1 %p %s",
 			(void *)bmp_mem, logo_fname);
 	run_command(cmd, 0);
 

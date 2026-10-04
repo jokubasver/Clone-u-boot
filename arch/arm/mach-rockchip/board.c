@@ -353,10 +353,12 @@ static int load_dtb_from_boot_ini(void)
 	char buf[4096];
 	loff_t len_read;
 	char *line, *next_line;
+	char part[8];
 
 	run_command("mmc rescan", 0);
 
-	if (fs_set_blk_dev("mmc", "1:1", FS_TYPE_FAT))
+	snprintf(part, sizeof(part), "%s:1", env_get("devnum"));
+	if (fs_set_blk_dev(env_get("devtype"), part, FS_TYPE_FAT))
 		return -1;
 
 	if (fs_read("boot.ini", (ulong)buf, 0, sizeof(buf) - 1, &len_read) != 0)
@@ -402,6 +404,8 @@ int init_kernel_dtb(void)
 	/* check hw revision */
 	board_check_hwrev();
 
+	boot_devtype_init();
+
 	/* load kernel dtb name from boot.ini for uboot use */
 	load_dtb_from_boot_ini();
 
@@ -415,7 +419,7 @@ int init_kernel_dtb(void)
 	}
 ////
 	//SD
-	ret = run_command("fatload mmc 1:1 ${fdt_addr_r} ${dtb_uboot}", 0);
+	ret = run_command("fatload ${devtype} ${devnum}:1 ${fdt_addr_r} ${dtb_uboot}", 0);
 	if (ret == CMD_RET_SUCCESS) {
 		ret = check_fdt_header(fdt_addr);
 	} 
