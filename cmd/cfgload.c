@@ -34,9 +34,10 @@ static int do_load_cfgload(cmd_tbl_t *cmdtp, int flag, int argc,
 	}
 
 	for (i = 0; i < ARRAY_SIZE(scripts); i++) {
-		if (file_exists("mmc", "1", scripts[i], FS_TYPE_ANY)) {
+		if (file_exists(env_get("devtype"), env_get("devnum"),
+				scripts[i], FS_TYPE_ANY)) {
 			snprintf(cmd, sizeof(cmd),
-				"load mmc 1:1 0x%08lx %s; source 0x%08lx",
+				"load ${devtype} ${devnum}:1 0x%08lx %s; source 0x%08lx",
 				addr, scripts[i], addr);
 			if (run_command(cmd, 0) == 0)
 				return 0;

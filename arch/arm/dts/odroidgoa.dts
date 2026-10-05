@@ -356,7 +356,10 @@
 };
 
 &emmc {
-	status = "disabled";
+	bus-width = <8>;
+	cap-mmc-highspeed;
+	non-removable;
+	status = "okay";
 };
 
 &pwm1 {

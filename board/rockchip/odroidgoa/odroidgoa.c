@@ -146,14 +146,17 @@ void board_init_switch_gpio(void)
 {
 	static struct px30_grf * const grf = (void *)GRF_BASE;
 
-	/* set iomux */
-	rk_clrreg(&grf->gpio1al_iomux, 0x0f00);
-	rk_clrreg(&grf->gpio1ah_iomux, 0xfff0);
-	rk_clrreg(&grf->gpio1bh_iomux, 0xffff);
+	/* GPIO1 is the eMMC bus when booted from eMMC */
+	if (strcmp(env_get("devnum"), "0")) {
+		/* set iomux */
+		rk_clrreg(&grf->gpio1al_iomux, 0x0f00);
+		rk_clrreg(&grf->gpio1ah_iomux, 0xfff0);
+		rk_clrreg(&grf->gpio1bh_iomux, 0xffff);
 
-	/* set pad pull control */
-	rk_clrsetreg(&grf->gpio1b_p, 0xff00, 0x5500);
-	rk_clrsetreg(&grf->gpio1a_p, 0xfcc0, 0x5440);
+		/* set pad pull control */
+		rk_clrsetreg(&grf->gpio1b_p, 0xff00, 0x5500);
+		rk_clrsetreg(&grf->gpio1a_p, 0xfcc0, 0x5440);
+	}
 	rk_clrsetreg(&grf->gpio2a_p, 0xffff, 0x5555);
 	if (is_odroidgo3())
 		rk_clrsetreg(&grf->gpio3b_p, 0xC33C, 0x4114);
@@ -164,8 +167,8 @@ void board_init_switch_gpio(void)
 void board_check_mandatory_files(void)
 {
 	/* check sd card existence */
-	if (CMD_RET_SUCCESS != run_command("mmc dev 1", 0)) {
-		if(CMD_RET_SUCCESS != run_command("mmc dev 1", 0)) {
+	if (CMD_RET_SUCCESS != run_command("${devtype} dev ${devnum}", 0)) {
+		if(CMD_RET_SUCCESS != run_command("${devtype} dev ${devnum}", 0)) {
 			odroid_display_status(LOGO_MODE_NO_SDCARD,
 				LOGO_STORAGE_ANYWHERE, NULL);
 			goto err;
@@ -207,7 +210,8 @@ int rk_board_late_init(void)
 	board_debug_uart2m1();
 
 	/* set sfc alternate function */
-	board_init_sfc_if();
+	if (strcmp(env_get("devnum"), "0"))
+		board_init_sfc_if();
 
 	/* set switch gpio */
 	board_init_switch_gpio();
