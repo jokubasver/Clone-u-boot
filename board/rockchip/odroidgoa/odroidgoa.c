@@ -14,6 +14,7 @@
 #include <fs.h>
 #include <version.h>
 #ifdef CONFIG_DM_CHARGE_DISPLAY
+#include <boot_rkimg.h>
 #include <power/charge_display.h>
 #endif
 #ifdef CONFIG_DM_FUEL_GAUGE
@@ -231,11 +232,28 @@ int rk_board_late_init(void)
 	{
 		struct udevice *fg;
 		int chrg_online = 0;
+		int boot_mode = rockchip_get_boot_mode();
 
 		if (!uclass_get_device(UCLASS_FG, 0, &fg))
 			chrg_online = fuel_gauge_get_chrg_online(fg);
 
-		if (chrg_online > 0) {
+		/*
+		 * The kernel leaves a reboot reason in the boot mode register
+		 * (BOOT_NORMAL for a plain reboot); it reads zero only after a
+		 * power-on. A reboot with the charger plugged in is meant to
+		 * reach the OS, not to stop at the charge screen. Clear the
+		 * reason once used, so that a later power-on by plugging in
+		 * the charger cannot read it again.
+		 */
+		if (boot_mode == BOOT_MODE_NORMAL || boot_mode == BOOT_MODE_PANIC ||
+		    boot_mode == BOOT_MODE_WATCHDOG)
+			writel(0, (void *)CONFIG_ROCKCHIP_BOOT_MODE_REG);
+
+		if (chrg_online > 0 && boot_mode != BOOT_MODE_UNDEFINE &&
+		    boot_mode != BOOT_MODE_CHARGING) {
+			printf("[board] charger detected, reboot (boot mode %d): skipping charge display\n",
+			       boot_mode);
+		} else if (chrg_online > 0) {
 			printf("[board] charger detected (PMIC), entering charge display\n");
 			charge_display();
 			printf("[board] charge_display returned\n");
